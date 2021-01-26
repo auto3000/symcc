@@ -80,6 +80,21 @@ RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
     && ninja distribution \
     && ninja install-distribution
 
+#Build hongfuzz
+WORKDIR /honggfuzz_build
+RUN apt-get -y update && apt-get install -y \
+    gcc \
+    git \
+    make \
+    pkg-config \
+	libipt-dev \
+	libunwind8-dev \
+	binutils-dev \
+&& rm -rf /var/lib/apt/lists/* && rm -rf /honggfuzz
+RUN git clone --depth=1 https://github.com/google/honggfuzz.git
+
+RUN cd honggfuzz && make && mkdir /honggfuzz && make install PREFIX=/honggfuzz
+
 #
 # The final image
 #
@@ -93,15 +108,24 @@ RUN apt-get update \
         libllvm10 \
         zlib1g \
         sudo \
+        vim less valgrind tmux gcovr lsb-release wget software-properties-common \
+        libipt2 libunwind8 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash ubuntu \
     && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
+
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add - \
+    && wget https://apt.llvm.org/llvm.sh \
+    && sudo bash llvm.sh 12 \
+    && sudo apt-get install clang-12
+
 
 COPY --from=builder /symcc_build /symcc_build
 COPY --from=builder /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
 COPY util/pure_concolic_execution.sh /symcc_build/
 COPY --from=builder /libcxx_symcc_install /libcxx_symcc_install
 COPY --from=builder /afl /afl
+COPY --from=builder /honggfuzz /honggfuzz
 
 ENV PATH /symcc_build:$PATH
 ENV AFL_PATH /afl
